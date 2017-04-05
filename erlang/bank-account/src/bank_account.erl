@@ -25,42 +25,54 @@ withdraw(BankAccount, Amount) ->
 
 
 balance(BankAccount) ->
-	{ok, Balance} = gen_server:call(BankAccount, balance),
-	Balance.
+	case gen_server:call(BankAccount, balance) of
+		{ok, Balance} -> 
+			Balance;
+		{error, account_closed} ->
+			{error, account_closed}
+	end.
 
 
 charge(BankAccount, Amount) ->
-	{ok, Balance} = gen_server:call(BankAccount, {charge, Amount}),
-	Amount.
+	{ok, AmountCharged} = gen_server:call(BankAccount, {charge, Amount}),
+	AmountCharged.
 
 
 close(BankAccount) ->
-	ClosingBalance = balance(BankAccount),
-	gen_server:stop(BankAccount),
+	{ok, ClosingBalance} = gen_server:call(BankAccount, close),
 	ClosingBalance.
 
 %% Implementation
 
+handle_call( balance, _From, Balance ) when Balance == -1->
+	{ reply, {error, account_closed}, -1};
 handle_call( balance, _From, Balance ) ->
 	{ reply, {ok, Balance}, Balance };
 
+handle_call( { withdraw, Amount }, _From, Balance ) when Amount < 0 ->
+	{ reply, {ok, 0}, Balance};
 handle_call( { withdraw, Amount }, _From, Balance ) when Amount =< Balance ->
 	NewBalance = Balance - Amount,
-	{ reply, {ok, NewBalance}, NewBalance };
-handle_call( { withdraw, Amount }, _From, Balance) ->
-
+	{ reply, {ok, Amount}, NewBalance };
+handle_call( { withdraw, Amount }, _From, Balance ) ->
 	{ reply, { ok, Balance }, 0};
 
-handle_call( { deposit, Amount }, _From, Balance)  when Amount > 0 ->
+handle_call( { deposit, Amount }, _From, Balance )  when Amount > 0 ->
 	NewBalance = Balance + Amount,
 	{ reply, { ok, NewBalance }, NewBalance };
 handle_call( { deposit, _Amount }, _From, Balance) ->
 	{ reply, { ok, 0 }, Balance};
 
-handle_call( { charge, Amount }, _From, Balance) ->
+handle_call( { charge, Amount }, _From, Balance ) when Amount < 0 ->
+	{ reply, { ok, 0 }, Balance };
+handle_call( { charge, Amount }, _From, Balance ) when Amount =< Balance ->
 	NewBalance = Balance - Amount,
-	{ reply, { ok, Amount }, NewBalance }.
+	{ reply, { ok, Amount }, NewBalance };
+handle_call( { charge, Amount }, _From, Balance ) ->
+	{reply, { ok, 0 }, Balance};
 
+handle_call( close, _From, Balance ) ->
+	{reply, {ok, Balance}, -1}.
 
 handle_cast(_,_) ->
 	not_implemented_yet.
